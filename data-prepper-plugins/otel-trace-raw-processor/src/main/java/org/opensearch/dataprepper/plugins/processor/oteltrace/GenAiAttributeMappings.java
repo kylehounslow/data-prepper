@@ -35,19 +35,19 @@ final class GenAiAttributeMappings {
 
     static final class MappingTarget {
         private final String key;
-        private final boolean wrapSlice;
+        private final boolean wrapAsArray;
 
-        MappingTarget(final String key, final boolean wrapSlice) {
+        MappingTarget(final String key, final boolean wrapAsArray) {
             this.key = key;
-            this.wrapSlice = wrapSlice;
+            this.wrapAsArray = wrapAsArray;
         }
 
         String getKey() {
             return key;
         }
 
-        boolean isWrapSlice() {
-            return wrapSlice;
+        boolean isWrapAsArray() {
+            return wrapAsArray;
         }
     }
 
@@ -103,7 +103,7 @@ final class GenAiAttributeMappings {
                 if (from == null || to == null) {
                     continue;
                 }
-                final boolean wrapSlice = Boolean.TRUE.equals(mapping.get("wrapSlice"));
+                final boolean wrapSlice = Boolean.TRUE.equals(mapping.get("wrap_as_array"));
                 table.putIfAbsent(from, new MappingTarget(to, wrapSlice));
             }
         }

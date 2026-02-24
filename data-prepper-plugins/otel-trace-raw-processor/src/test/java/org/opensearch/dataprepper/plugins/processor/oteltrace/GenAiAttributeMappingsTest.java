@@ -59,7 +59,7 @@ class GenAiAttributeMappingsTest {
                 GenAiAttributeMappings.getLookupTable().get("llm.response.finish_reason");
         assertNotNull(target);
         assertEquals("gen_ai.response.finish_reasons", target.getKey());
-        assertEquals(true, target.isWrapSlice());
+        assertEquals(true, target.isWrapAsArray());
     }
 
     @Test

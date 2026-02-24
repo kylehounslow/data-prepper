@@ -201,7 +201,7 @@ final class GenAiEnrichmentHelper {
                         value = mapped;
                     }
                 }
-                if (target.isWrapSlice()) {
+                if (target.isWrapAsArray()) {
                     value = "[\"" + value + "\"]";
                 }
             }
