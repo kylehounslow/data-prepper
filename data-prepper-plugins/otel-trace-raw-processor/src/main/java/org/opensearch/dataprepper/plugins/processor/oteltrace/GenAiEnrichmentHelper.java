@@ -183,30 +183,30 @@ final class GenAiEnrichmentHelper {
             // Convert storage key (e.g. "span.attributes.llm@usage@prompt_tokens") to logical key for lookup
             final String logicalKey = toLogicalKey(entry.getKey());
             final GenAiAttributeMappings.MappingTarget target =
-                    GenAiAttributeMappings.LOOKUP_TABLE.get(logicalKey);
+                    GenAiAttributeMappings.getLookupTable().get(logicalKey);
             if (target == null) {
                 continue;
             }
-            if (attrs.containsKey(toStorageKey(target.key))) {
+            if (attrs.containsKey(toStorageKey(target.getKey()))) {
                 continue;
             }
 
             Object value = entry.getValue();
             if (value instanceof String) {
                 final String strVal = (String) value;
-                if ("gen_ai.operation.name".equals(target.key)) {
-                    final String mapped = GenAiAttributeMappings.OPERATION_NAME_VALUES
+                if ("gen_ai.operation.name".equals(target.getKey())) {
+                    final String mapped = GenAiAttributeMappings.getOperationNameValues()
                             .get(strVal.toLowerCase());
                     if (mapped != null) {
                         value = mapped;
                     }
                 }
-                if (target.wrapSlice) {
+                if (target.isWrapSlice()) {
                     value = "[\"" + value + "\"]";
                 }
             }
 
-            span.put(ATTRIBUTES_PREFIX + toStorageKey(target.key), value);
+            span.put(ATTRIBUTES_PREFIX + toStorageKey(target.getKey()), value);
         }
     }
 

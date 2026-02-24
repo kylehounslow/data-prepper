@@ -96,8 +96,11 @@ class GenAiEnrichmentTest {
         final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
                 "genai-flattened-subkeys-root-span.json", "genai-flattened-subkeys-child-span.json"));
 
+        assertFalse(result.isEmpty(), "Expected spans in result");
+
         for (final Record<Span> record : result) {
             final Map<String, Object> attrs = record.getData().getAttributes();
+            assertFalse(attrs.isEmpty(), "Expected non-empty attributes on span " + record.getData().getSpanId());
             for (final String key : attrs.keySet()) {
                 assertFalse(key.matches("span\\.attributes\\.llm@input_messages@\\d+.*"),
                         "Flattened sub-key should be stripped: " + key);

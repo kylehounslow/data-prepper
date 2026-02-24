@@ -20,8 +20,8 @@ import java.util.Map;
 final class GenAiAttributeMappings {
 
     static final class MappingTarget {
-        final String key;
-        final boolean wrapSlice;
+        private final String key;
+        private final boolean wrapSlice;
 
         MappingTarget(final String key) {
             this(key, false);
@@ -31,15 +31,30 @@ final class GenAiAttributeMappings {
             this.key = key;
             this.wrapSlice = wrapSlice;
         }
+
+        String getKey() {
+            return key;
+        }
+
+        boolean isWrapSlice() {
+            return wrapSlice;
+        }
     }
 
     private GenAiAttributeMappings() {}
 
+    private static final Map<String, MappingTarget> LOOKUP_TABLE = buildLookupTable();
+    private static final Map<String, String> OPERATION_NAME_VALUES = buildOperationNameValues();
+
     /** Combined lookup table for all profiles. */
-    static final Map<String, MappingTarget> LOOKUP_TABLE = buildLookupTable();
+    static Map<String, MappingTarget> getLookupTable() {
+        return LOOKUP_TABLE;
+    }
 
     /** Value mappings for gen_ai.operation.name (case-insensitive). */
-    static final Map<String, String> OPERATION_NAME_VALUES = buildOperationNameValues();
+    static Map<String, String> getOperationNameValues() {
+        return OPERATION_NAME_VALUES;
+    }
 
     private static Map<String, MappingTarget> buildLookupTable() {
         final Map<String, MappingTarget> table = new HashMap<>();
