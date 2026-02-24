@@ -10,22 +10,32 @@
 
 package org.opensearch.dataprepper.plugins.processor.oteltrace;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Attribute mappings from vendor-specific instrumentation libraries to OTel GenAI Semantic Conventions v1.39.0.
- * Ported from <a href="https://github.com/kylehounslow/genainormalizer">genainormalizer</a>.
+ * Mappings are loaded from {@code genai-attribute-mappings.yaml} in the jar resources.
+ *
+ * @see <a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/">OTel GenAI Semantic Conventions</a>
  */
 final class GenAiAttributeMappings {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GenAiAttributeMappings.class);
+    static final String MAPPINGS_FILE = "genai-attribute-mappings.yaml";
 
     static final class MappingTarget {
         private final String key;
         private final boolean wrapSlice;
-
-        MappingTarget(final String key) {
-            this(key, false);
-        }
 
         MappingTarget(final String key, final boolean wrapSlice) {
             this.key = key;
@@ -41,94 +51,75 @@ final class GenAiAttributeMappings {
         }
     }
 
-    private GenAiAttributeMappings() {}
+    private static final Map<String, MappingTarget> LOOKUP_TABLE;
+    private static final Map<String, String> OPERATION_NAME_VALUES;
 
-    private static final Map<String, MappingTarget> LOOKUP_TABLE = buildLookupTable();
-    private static final Map<String, String> OPERATION_NAME_VALUES = buildOperationNameValues();
+    static {
+        Map<String, MappingTarget> lookupTable = Collections.emptyMap();
+        Map<String, String> operationNameValues = Collections.emptyMap();
+        try (final InputStream is = GenAiAttributeMappings.class.getClassLoader().getResourceAsStream(MAPPINGS_FILE)) {
+            if (is == null) {
+                LOG.error("GenAI attribute mappings file not found: {}", MAPPINGS_FILE);
+            } else {
+                final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+                @SuppressWarnings("unchecked")
+                final Map<String, Object> yaml = mapper.readValue(is, Map.class);
+                lookupTable = buildLookupTable(yaml);
+                operationNameValues = buildOperationNameValues(yaml);
+            }
+        } catch (final IOException e) {
+            LOG.error("Failed to load GenAI attribute mappings from {}", MAPPINGS_FILE, e);
+        }
+        LOOKUP_TABLE = Collections.unmodifiableMap(lookupTable);
+        OPERATION_NAME_VALUES = Collections.unmodifiableMap(operationNameValues);
+    }
+
+    private GenAiAttributeMappings() {}
 
     /** Combined lookup table for all profiles. */
     static Map<String, MappingTarget> getLookupTable() {
         return LOOKUP_TABLE;
     }
 
-    /** Value mappings for gen_ai.operation.name (case-insensitive). */
+    /** Value mappings for gen_ai.operation.name (case-insensitive keys). */
     static Map<String, String> getOperationNameValues() {
         return OPERATION_NAME_VALUES;
     }
 
-    private static Map<String, MappingTarget> buildLookupTable() {
+    @SuppressWarnings("unchecked")
+    private static Map<String, MappingTarget> buildLookupTable(final Map<String, Object> yaml) {
         final Map<String, MappingTarget> table = new HashMap<>();
-
-        // --- OpenInference (Arize) ---
-        // https://github.com/Arize-ai/openinference/blob/main/spec/semantic_conventions.md
-        table.put("llm.token_count.prompt", new MappingTarget("gen_ai.usage.input_tokens"));
-        table.put("llm.token_count.completion", new MappingTarget("gen_ai.usage.output_tokens"));
-        table.put("llm.model_name", new MappingTarget("gen_ai.request.model"));
-        table.put("llm.provider", new MappingTarget("gen_ai.provider.name"));
-        table.put("llm.input_messages", new MappingTarget("gen_ai.input.messages"));
-        table.put("llm.output_messages", new MappingTarget("gen_ai.output.messages"));
-        table.put("embedding.model_name", new MappingTarget("gen_ai.request.model"));
-        table.put("tool.name", new MappingTarget("gen_ai.tool.name"));
-        table.put("tool.description", new MappingTarget("gen_ai.tool.description"));
-        table.put("tool_call.function.arguments", new MappingTarget("gen_ai.tool.call.arguments"));
-        table.put("tool_call.id", new MappingTarget("gen_ai.tool.call.id"));
-        table.put("reranker.model_name", new MappingTarget("gen_ai.request.model"));
-        table.put("agent.name", new MappingTarget("gen_ai.agent.name"));
-        table.put("session.id", new MappingTarget("gen_ai.conversation.id"));
-        table.put("openinference.span.kind", new MappingTarget("gen_ai.operation.name"));
-
-        // --- OpenLLMetry (Traceloop) ---
-        // https://www.traceloop.com/docs/openllmetry/contributing/semantic-conventions
-        table.put("llm.usage.prompt_tokens", new MappingTarget("gen_ai.usage.input_tokens"));
-        table.put("llm.usage.completion_tokens", new MappingTarget("gen_ai.usage.output_tokens"));
-        table.put("llm.request.model", new MappingTarget("gen_ai.request.model"));
-        table.put("llm.response.model", new MappingTarget("gen_ai.response.model"));
-        table.put("llm.request.max_tokens", new MappingTarget("gen_ai.request.max_tokens"));
-        table.put("llm.request.temperature", new MappingTarget("gen_ai.request.temperature"));
-        table.put("llm.request.top_p", new MappingTarget("gen_ai.request.top_p"));
-        table.put("llm.top_k", new MappingTarget("gen_ai.request.top_k"));
-        table.put("llm.frequency_penalty", new MappingTarget("gen_ai.request.frequency_penalty"));
-        table.put("llm.presence_penalty", new MappingTarget("gen_ai.request.presence_penalty"));
-        table.put("llm.chat.stop_sequences", new MappingTarget("gen_ai.request.stop_sequences"));
-        table.put("llm.request.functions", new MappingTarget("gen_ai.tool.definitions"));
-        table.put("llm.response.finish_reason", new MappingTarget("gen_ai.response.finish_reasons", true));
-        table.put("llm.response.stop_reason", new MappingTarget("gen_ai.response.finish_reasons", true));
-        table.put("llm.request.type", new MappingTarget("gen_ai.operation.name"));
-        table.put("traceloop.span.kind", new MappingTarget("gen_ai.operation.name"));
-        table.put("traceloop.entity.name", new MappingTarget("gen_ai.agent.name"));
-        table.put("traceloop.entity.input", new MappingTarget("gen_ai.input.messages"));
-        table.put("traceloop.entity.output", new MappingTarget("gen_ai.output.messages"));
-
+        for (final Map.Entry<String, Object> profile : yaml.entrySet()) {
+            if (!(profile.getValue() instanceof List)) {
+                continue;
+            }
+            for (final Object entry : (List<?>) profile.getValue()) {
+                if (!(entry instanceof Map)) {
+                    continue;
+                }
+                final Map<String, Object> mapping = (Map<String, Object>) entry;
+                final String from = (String) mapping.get("from");
+                final String to = (String) mapping.get("to");
+                if (from == null || to == null) {
+                    continue;
+                }
+                final boolean wrapSlice = Boolean.TRUE.equals(mapping.get("wrapSlice"));
+                table.putIfAbsent(from, new MappingTarget(to, wrapSlice));
+            }
+        }
         return table;
     }
 
-    private static Map<String, String> buildOperationNameValues() {
-        final Map<String, String> raw = new HashMap<>();
-        // OpenInference span kinds
-        raw.put("LLM", "chat");
-        raw.put("EMBEDDING", "embeddings");
-        raw.put("CHAIN", "invoke_agent");
-        raw.put("RETRIEVER", "retrieval");
-        raw.put("RERANKER", "retrieval");
-        raw.put("TOOL", "execute_tool");
-        raw.put("AGENT", "invoke_agent");
-        raw.put("PROMPT", "text_completion");
-        // OpenLLMetry traceloop.span.kind
-        raw.put("workflow", "invoke_agent");
-        raw.put("task", "invoke_agent");
-        raw.put("agent", "invoke_agent");
-        raw.put("tool", "execute_tool");
-        // OpenLLMetry llm.request.type
-        raw.put("completion", "text_completion");
-        raw.put("chat", "chat");
-        raw.put("rerank", "retrieval");
-        raw.put("embedding", "embeddings");
-
-        // Normalize keys to lowercase for case-insensitive lookup
-        final Map<String, String> normalized = new HashMap<>();
-        for (final Map.Entry<String, String> entry : raw.entrySet()) {
-            normalized.put(entry.getKey().toLowerCase(), entry.getValue());
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> buildOperationNameValues(final Map<String, Object> yaml) {
+        final Object raw = yaml.get("operation_name_values");
+        if (!(raw instanceof Map)) {
+            return Collections.emptyMap();
         }
-        return normalized;
+        final Map<String, String> values = new HashMap<>();
+        for (final Map.Entry<String, Object> entry : ((Map<String, Object>) raw).entrySet()) {
+            values.put(entry.getKey().toLowerCase(), (String) entry.getValue());
+        }
+        return values;
     }
 }

@@ -12,11 +12,20 @@ package org.opensearch.dataprepper.plugins.processor.oteltrace;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.InputStream;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class GenAiAttributeMappingsTest {
+
+    @Test
+    void testMappingsFileExists() {
+        final InputStream is = GenAiAttributeMappings.class.getClassLoader()
+                .getResourceAsStream(GenAiAttributeMappings.MAPPINGS_FILE);
+        assertNotNull(is, "Mappings file should exist in resources: " + GenAiAttributeMappings.MAPPINGS_FILE);
+    }
 
     @Test
     void testLookupTableIsNonEmpty() {
