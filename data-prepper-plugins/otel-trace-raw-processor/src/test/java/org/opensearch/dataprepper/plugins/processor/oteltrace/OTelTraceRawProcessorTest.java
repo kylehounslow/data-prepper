@@ -456,8 +456,8 @@ class OTelTraceRawProcessorTest {
         // Verifies that GenAI enrichment (normalization + propagation) runs as part of doExecute.
         // Uses a span with OpenLLMetry vendor attributes (llm.usage.prompt_tokens) and asserts
         // the normalized gen_ai.* attribute appears on the output span.
-        final Span root = convertToStorageFormat(buildSpanFromJsonFile("genai-root-span.json"));
-        final Span child = convertToStorageFormat(buildSpanFromJsonFile("openllmetry-child-span.json"));
+        final Span root = buildSpanFromJsonFile("genai-root-span.json");
+        final Span child = buildSpanFromJsonFile("openllmetry-child-span.json");
 
         final Collection<Record<Span>> result = oTelTraceRawProcessor.doExecute(
                 Stream.of(root, child).map(Record::new).collect(Collectors.toList()));
@@ -465,32 +465,7 @@ class OTelTraceRawProcessorTest {
         final Span outputRoot = result.stream().map(Record::getData)
                 .filter(s -> s.getParentSpanId() == null || s.getParentSpanId().isEmpty())
                 .findFirst().orElseThrow();
-        assertThat(outputRoot.getAttributes().get("span.attributes.gen_ai@usage@input_tokens")).isNotNull();
-    }
-
-    private static Span convertToStorageFormat(final Span span) {
-        final Map<String, Object> attrs = span.getAttributes();
-        if (attrs == null || attrs.isEmpty()) {
-            return span;
-        }
-        final Map<String, Object> converted = new java.util.LinkedHashMap<>();
-        for (final Map.Entry<String, Object> entry : attrs.entrySet()) {
-            converted.put("span.attributes." + entry.getKey().replace('.', '@'), entry.getValue());
-        }
-        return JacksonSpan.builder()
-                .withTraceId(span.getTraceId())
-                .withSpanId(span.getSpanId())
-                .withParentSpanId(span.getParentSpanId())
-                .withTraceState(span.getTraceState())
-                .withName(span.getName())
-                .withKind(span.getKind())
-                .withDurationInNanos(span.getDurationInNanos())
-                .withStartTime(span.getStartTime())
-                .withEndTime(span.getEndTime())
-                .withTraceGroup(span.getTraceGroup())
-                .withTraceGroupFields(span.getTraceGroupFields())
-                .withAttributes(converted)
-                .build();
+        assertThat(outputRoot.getAttributes().get("gen_ai.usage.input_tokens")).isNotNull();
     }
 
     private static Span buildSpanFromJsonFile(final String jsonFileName) {

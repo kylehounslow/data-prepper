@@ -55,45 +55,45 @@ class GenAiEnrichmentTest {
 
     @Test
     void testGenAiSystemPropagatedFromChildToRoot() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-root-span.json", "genai-child-span.json"));
 
         final Span root = findRoot(result);
-        assertEquals("aws.bedrock", root.getAttributes().get("span.attributes.gen_ai@system"));
+        assertEquals("aws.bedrock", root.getAttributes().get("gen_ai.system"));
     }
 
     @Test
     void testRootWithExistingGenAiNotOverwritten() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-root-span-with-genai-attr.json", "genai-child-span-with-genai-root.json"));
 
         final Span root = findRoot(result);
-        assertEquals("openai", root.getAttributes().get("span.attributes.gen_ai@system"));
+        assertEquals("openai", root.getAttributes().get("gen_ai.system"));
     }
 
     @Test
     void testTokenAggregation() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-tokens-root-span.json", "genai-tokens-child-span-1.json", "genai-tokens-child-span-2.json"));
 
         final Span root = findRoot(result);
-        assertEquals(300L, ((Number) root.getAttributes().get("span.attributes.gen_ai@usage@input_tokens")).longValue());
-        assertEquals(125L, ((Number) root.getAttributes().get("span.attributes.gen_ai@usage@output_tokens")).longValue());
+        assertEquals(300L, ((Number) root.getAttributes().get("gen_ai.usage.input_tokens")).longValue());
+        assertEquals(125L, ((Number) root.getAttributes().get("gen_ai.usage.output_tokens")).longValue());
     }
 
     @Test
     void testTokenAggregationSkippedWhenRootHasTokens() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-tokens-root-span-with-tokens.json", "genai-tokens-child-span-with-root-tokens.json"));
 
         final Span root = findRoot(result);
-        assertEquals(500, ((Number) root.getAttributes().get("span.attributes.gen_ai@usage@input_tokens")).intValue());
-        assertEquals(200, ((Number) root.getAttributes().get("span.attributes.gen_ai@usage@output_tokens")).intValue());
+        assertEquals(500, ((Number) root.getAttributes().get("gen_ai.usage.input_tokens")).intValue());
+        assertEquals(200, ((Number) root.getAttributes().get("gen_ai.usage.output_tokens")).intValue());
     }
 
     @Test
     void testFlattenedSubkeysStripped() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-flattened-subkeys-root-span.json", "genai-flattened-subkeys-child-span.json"));
 
         assertFalse(result.isEmpty(), "Expected spans in result");
@@ -102,7 +102,7 @@ class GenAiEnrichmentTest {
             final Map<String, Object> attrs = record.getData().getAttributes();
             assertFalse(attrs.isEmpty(), "Expected non-empty attributes on span " + record.getData().getSpanId());
             for (final String key : attrs.keySet()) {
-                assertFalse(key.matches("span\\.attributes\\.llm@input_messages@\\d+.*"),
+                assertFalse(key.matches("llm\\.input_messages\\.\\d+\\..*"),
                         "Flattened sub-key should be stripped: " + key);
             }
         }
@@ -110,16 +110,16 @@ class GenAiEnrichmentTest {
 
     @Test
     void testNoEnrichmentForNonGenAiTraces() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "plain-root-span.json", "plain-child-span.json"));
 
         final Span root = findRoot(result);
-        assertNull(root.getAttributes().get("span.attributes.gen_ai@system"));
+        assertNull(root.getAttributes().get("gen_ai.system"));
     }
 
     @Test
     void testOpenInferenceNormalization() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-root-span.json", "openinference-child-span.json"));
 
         final Span child = result.stream().map(Record::getData)
@@ -127,23 +127,23 @@ class GenAiEnrichmentTest {
                 .findFirst().orElseThrow();
         final Map<String, Object> attrs = child.getAttributes();
 
-        // Normalized attributes should exist in storage format
-        assertEquals(150, ((Number) attrs.get("span.attributes.gen_ai@usage@input_tokens")).intValue());
-        assertEquals(42, ((Number) attrs.get("span.attributes.gen_ai@usage@output_tokens")).intValue());
-        assertEquals("claude-3-sonnet", attrs.get("span.attributes.gen_ai@request@model"));
-        assertEquals("anthropic", attrs.get("span.attributes.gen_ai@provider@name"));
-        assertEquals("chat", attrs.get("span.attributes.gen_ai@operation@name")); // LLM -> chat
-        assertEquals("weather-agent", attrs.get("span.attributes.gen_ai@agent@name"));
-        assertEquals("sess-123", attrs.get("span.attributes.gen_ai@conversation@id"));
+        // Normalized attributes should exist
+        assertEquals(150, ((Number) attrs.get("gen_ai.usage.input_tokens")).intValue());
+        assertEquals(42, ((Number) attrs.get("gen_ai.usage.output_tokens")).intValue());
+        assertEquals("claude-3-sonnet", attrs.get("gen_ai.request.model"));
+        assertEquals("anthropic", attrs.get("gen_ai.provider.name"));
+        assertEquals("chat", attrs.get("gen_ai.operation.name")); // LLM -> chat
+        assertEquals("weather-agent", attrs.get("gen_ai.agent.name"));
+        assertEquals("sess-123", attrs.get("gen_ai.conversation.id"));
 
-        // Originals should be preserved in storage format
-        assertEquals(150, ((Number) attrs.get("span.attributes.llm@token_count@prompt")).intValue());
-        assertEquals("anthropic", attrs.get("span.attributes.llm@provider"));
+        // Originals should be preserved
+        assertEquals(150, ((Number) attrs.get("llm.token_count.prompt")).intValue());
+        assertEquals("anthropic", attrs.get("llm.provider"));
     }
 
     @Test
     void testOpenLLMetryNormalization() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-root-span.json", "openllmetry-child-span.json"));
 
         final Span child = result.stream().map(Record::getData)
@@ -151,81 +151,39 @@ class GenAiEnrichmentTest {
                 .findFirst().orElseThrow();
         final Map<String, Object> attrs = child.getAttributes();
 
-        assertEquals(200, ((Number) attrs.get("span.attributes.gen_ai@usage@input_tokens")).intValue());
-        assertEquals(55, ((Number) attrs.get("span.attributes.gen_ai@usage@output_tokens")).intValue());
-        assertEquals("gpt-4o", attrs.get("span.attributes.gen_ai@request@model"));
-        assertEquals("chat", attrs.get("span.attributes.gen_ai@operation@name")); // chat -> chat
-        assertEquals("[\"stop\"]", attrs.get("span.attributes.gen_ai@response@finish_reasons")); // wrapSlice
-        assertEquals("research-agent", attrs.get("span.attributes.gen_ai@agent@name"));
+        assertEquals(200, ((Number) attrs.get("gen_ai.usage.input_tokens")).intValue());
+        assertEquals(55, ((Number) attrs.get("gen_ai.usage.output_tokens")).intValue());
+        assertEquals("gpt-4o", attrs.get("gen_ai.request.model"));
+        assertEquals("chat", attrs.get("gen_ai.operation.name")); // chat -> chat
+        assertEquals("[\"stop\"]", attrs.get("gen_ai.response.finish_reasons")); // wrapAsArray
+        assertEquals("research-agent", attrs.get("gen_ai.agent.name"));
 
-        // Originals preserved in storage format
-        assertEquals(200, ((Number) attrs.get("span.attributes.llm@usage@prompt_tokens")).intValue());
+        // Originals preserved
+        assertEquals(200, ((Number) attrs.get("llm.usage.prompt_tokens")).intValue());
     }
 
     @Test
     void testNormalizationSkipsExistingTarget() {
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-root-span.json", "genai-child-span.json"));
 
-        // genai-child-span already has gen_ai.system = aws.bedrock (in storage format after conversion)
+        // genai-child-span already has gen_ai.system = aws.bedrock
         final Span child = result.stream().map(Record::getData)
                 .filter(s -> s.getParentSpanId() != null && !s.getParentSpanId().isEmpty())
                 .findFirst().orElseThrow();
-        assertEquals("aws.bedrock", child.getAttributes().get("span.attributes.gen_ai@system"));
+        assertEquals("aws.bedrock", child.getAttributes().get("gen_ai.system"));
     }
 
     @Test
     void testNormalizationEnablesTokenAggregation() {
         // OpenInference child has llm.token_count.prompt/completion, not gen_ai.usage.*
         // After normalization, tokens should be aggregated to root
-        final Collection<Record<Span>> result = processor.doExecute(storageFormatRecords(
+        final Collection<Record<Span>> result = processor.doExecute(records(
                 "genai-root-span.json", "openinference-child-span.json"));
 
         final Span root = findRoot(result);
-        assertEquals(150L, ((Number) root.getAttributes().get("span.attributes.gen_ai@usage@input_tokens")).longValue());
-        assertEquals(42L, ((Number) root.getAttributes().get("span.attributes.gen_ai@usage@output_tokens")).longValue());
-    }
-
-    /**
-     * Builds records from JSON files and converts attribute keys to storage format,
-     * simulating what OTelProtoOpensearchCodec does when parsing real OTLP spans.
-     * Dot-notation keys (e.g. "gen_ai.system") become "span.attributes.gen_ai@system".
-     */
-    private List<Record<Span>> storageFormatRecords(final String... files) {
-        return Stream.of(files)
-                .map(GenAiEnrichmentTest::buildSpanFromJsonFile)
-                .map(GenAiEnrichmentTest::convertToStorageFormat)
-                .map(Record::new)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Converts a span's attribute keys from dot-notation to the storage format used by
-     * OTelProtoOpensearchCodec: "gen_ai.system" → "span.attributes.gen_ai@system".
-     */
-    private static Span convertToStorageFormat(final Span span) {
-        final Map<String, Object> attrs = span.getAttributes();
-        if (attrs == null || attrs.isEmpty()) {
-            return span;
-        }
-        final Map<String, Object> converted = new java.util.LinkedHashMap<>();
-        for (final Map.Entry<String, Object> entry : attrs.entrySet()) {
-            converted.put("span.attributes." + entry.getKey().replace('.', '@'), entry.getValue());
-        }
-        return JacksonSpan.builder()
-                .withTraceId(span.getTraceId())
-                .withSpanId(span.getSpanId())
-                .withParentSpanId(span.getParentSpanId())
-                .withTraceState(span.getTraceState())
-                .withName(span.getName())
-                .withKind(span.getKind())
-                .withDurationInNanos(span.getDurationInNanos())
-                .withStartTime(span.getStartTime())
-                .withEndTime(span.getEndTime())
-                .withTraceGroup(span.getTraceGroup())
-                .withTraceGroupFields(span.getTraceGroupFields())
-                .withAttributes(converted)
-                .build();
+        assertEquals(150L, ((Number) root.getAttributes().get("gen_ai.usage.input_tokens")).longValue());
+        assertEquals(42L, ((Number) root.getAttributes().get("gen_ai.usage.output_tokens")).longValue());
     }
 
     private List<Record<Span>> records(final String... files) {

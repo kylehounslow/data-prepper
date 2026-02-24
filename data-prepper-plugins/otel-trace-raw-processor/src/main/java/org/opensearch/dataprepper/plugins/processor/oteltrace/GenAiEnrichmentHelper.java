@@ -48,27 +48,6 @@ final class GenAiEnrichmentHelper {
 
     private GenAiEnrichmentHelper() {}
 
-    private static final String STORAGE_PREFIX = "span.attributes.";
-
-    /**
-     * Converts a logical dot-notation key (e.g. "gen_ai.system") to the storage format
-     * used by OTelProtoOpensearchCodec in the span attributes map (e.g. "span.attributes.gen_ai@system").
-     */
-    static String toStorageKey(final String logicalKey) {
-        return STORAGE_PREFIX + logicalKey.replace('.', '@');
-    }
-
-    /**
-     * Converts a storage-format key (e.g. "span.attributes.gen_ai@system") back to
-     * logical dot-notation (e.g. "gen_ai.system") for lookup table matching.
-     */
-    static String toLogicalKey(final String storageKey) {
-        if (storageKey.startsWith(STORAGE_PREFIX)) {
-            return storageKey.substring(STORAGE_PREFIX.length()).replace('@', '.');
-        }
-        return storageKey;
-    }
-
     /**
      * Enriches a batch of spans: normalizes vendor attributes, strips flattened sub-keys,
      * then propagates select gen_ai attributes from children to root spans grouped by traceId.
@@ -115,11 +94,11 @@ final class GenAiEnrichmentHelper {
 
         final Map<String, String> toPropagate = new HashMap<>();
         for (final String key : PROPAGATED_STRING_KEYS) {
-            if (rootAttrs == null || !rootAttrs.containsKey(toStorageKey(key))) {
+            if (rootAttrs == null || !rootAttrs.containsKey(key)) {
                 toPropagate.put(key, null);
             }
         }
-        final boolean rootHasTokens = rootAttrs != null && rootAttrs.containsKey(toStorageKey(GEN_AI_INPUT_TOKENS_KEY));
+        final boolean rootHasTokens = rootAttrs != null && rootAttrs.containsKey(GEN_AI_INPUT_TOKENS_KEY);
 
         if (toPropagate.isEmpty() && rootHasTokens) {
             return;
@@ -136,13 +115,13 @@ final class GenAiEnrichmentHelper {
             }
 
             for (final Map.Entry<String, String> entry : toPropagate.entrySet()) {
-                if (entry.getValue() == null && attrs.containsKey(toStorageKey(entry.getKey()))) {
-                    entry.setValue((String) attrs.get(toStorageKey(entry.getKey())));
+                if (entry.getValue() == null && attrs.containsKey(entry.getKey())) {
+                    entry.setValue((String) attrs.get(entry.getKey()));
                 }
             }
 
-            final Number inputTokens = (Number) attrs.get(toStorageKey(GEN_AI_INPUT_TOKENS_KEY));
-            final Number outputTokens = (Number) attrs.get(toStorageKey(GEN_AI_OUTPUT_TOKENS_KEY));
+            final Number inputTokens = (Number) attrs.get(GEN_AI_INPUT_TOKENS_KEY);
+            final Number outputTokens = (Number) attrs.get(GEN_AI_OUTPUT_TOKENS_KEY);
             if (inputTokens != null || outputTokens != null) {
                 foundTokens = true;
                 if (inputTokens != null) {
@@ -156,14 +135,14 @@ final class GenAiEnrichmentHelper {
 
         for (final Map.Entry<String, String> entry : toPropagate.entrySet()) {
             if (entry.getValue() != null) {
-                rootSpan.put(ATTRIBUTES_PREFIX + toStorageKey(entry.getKey()), entry.getValue());
+                rootSpan.put(ATTRIBUTES_PREFIX + entry.getKey(), entry.getValue());
                 LOG.debug("Propagated {} = {} to root span {}", entry.getKey(), entry.getValue(), rootSpan.getSpanId());
             }
         }
 
         if (!rootHasTokens && foundTokens) {
-            rootSpan.put(ATTRIBUTES_PREFIX + toStorageKey(GEN_AI_INPUT_TOKENS_KEY), totalInputTokens);
-            rootSpan.put(ATTRIBUTES_PREFIX + toStorageKey(GEN_AI_OUTPUT_TOKENS_KEY), totalOutputTokens);
+            rootSpan.put(ATTRIBUTES_PREFIX + GEN_AI_INPUT_TOKENS_KEY, totalInputTokens);
+            rootSpan.put(ATTRIBUTES_PREFIX + GEN_AI_OUTPUT_TOKENS_KEY, totalOutputTokens);
             LOG.debug("Aggregated tokens (input={}, output={}) to root span {}", totalInputTokens, totalOutputTokens, rootSpan.getSpanId());
         }
     }
@@ -180,14 +159,12 @@ final class GenAiEnrichmentHelper {
         }
 
         for (final Map.Entry<String, Object> entry : new ArrayList<>(attrs.entrySet())) {
-            // Convert storage key (e.g. "span.attributes.llm@usage@prompt_tokens") to logical key for lookup
-            final String logicalKey = toLogicalKey(entry.getKey());
             final GenAiAttributeMappings.MappingTarget target =
-                    GenAiAttributeMappings.getLookupTable().get(logicalKey);
+                    GenAiAttributeMappings.getLookupTable().get(entry.getKey());
             if (target == null) {
                 continue;
             }
-            if (attrs.containsKey(toStorageKey(target.getKey()))) {
+            if (attrs.containsKey(target.getKey())) {
                 continue;
             }
 
@@ -206,7 +183,7 @@ final class GenAiEnrichmentHelper {
                 }
             }
 
-            span.put(ATTRIBUTES_PREFIX + toStorageKey(target.getKey()), value);
+            span.put(ATTRIBUTES_PREFIX + target.getKey(), value);
         }
     }
 
@@ -223,15 +200,12 @@ final class GenAiEnrichmentHelper {
 
         final List<String> toRemove = new ArrayList<>();
         for (final String parentKey : FLATTENED_PARENT_KEYS) {
-            // Check for parent using storage format (e.g. "span.attributes.llm@input_messages")
-            final String parentStorageKey = toStorageKey(parentKey);
-            if (!attrs.containsKey(parentStorageKey)) {
+            if (!attrs.containsKey(parentKey)) {
                 continue;
             }
             for (final String key : attrs.keySet()) {
-                // Sub-keys in storage format: "span.attributes.llm@input_messages@0@message@role"
-                if (key.startsWith(parentStorageKey + "@") && key.length() > parentStorageKey.length() + 1
-                        && Character.isDigit(key.charAt(parentStorageKey.length() + 1))) {
+                if (key.startsWith(parentKey + ".") && key.length() > parentKey.length() + 1
+                        && Character.isDigit(key.charAt(parentKey.length() + 1))) {
                     toRemove.add(key);
                 }
             }
